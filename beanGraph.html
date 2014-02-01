@@ -1,0 +1,118 @@
+<?xml version="1.0" encoding="ISO-8859-1" ?>
+<html>
+<!-- Based on D3 Force layout example at http://bl.ocks.org/mbostock/4062045 -->
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=ISO-8859-1" />
+<title>Spring bean graph</title>
+<style>
+.node {
+  stroke: #fff;
+  stroke-width: 1.5px;
+}
+
+.link {
+  stroke: #999;
+  stroke-opacity: .6;
+}
+
+</style>
+</head>
+<body>
+<script src="http://d3js.org/d3.v3.min.js"></script>
+<script>
+d3.json("beansData.jsp", function(error, beansData) {
+if(error) {
+	console.log("error msg from load: "+error);
+}
+if(beansData) {
+	initGraph(beansData);
+}
+});
+
+function visitBeans(beansData, visitor) {
+	for (var ctxIdx = 0; ctxIdx < beansData.length; ctxIdx++) {
+		var ctx = beansData[ctxIdx];
+		var ctxBeans = ctx.beans;
+		for (var beanIdx = 0; beanIdx < ctxBeans.length; beanIdx++) {
+			beanInfo = ctxBeans[beanIdx];
+			visitor(beanInfo, ctxIdx, ctx);
+		}
+	}
+}
+
+function initGraph(beansData) {
+	var width = 1024,
+		height = 768;
+	var color = d3.scale.category20();
+	var force = d3.layout.force().charge(-120).linkDistance(30).size([width, height]);
+	var svg = d3.select("body").append("svg").attr("width", width).attr("height", height);
+
+	// var marker = d3.select("svg").append("marker").attr({'id':'arrow', 'markerWidth':2, 'markerHeight':4, 'viewBox':'0 0 4 4', 'refX':0, 'refY':2, markerUnits:'strokeWidth', orient:'auto'});
+	// marker.append('path').attr('d',"M 0 0 L 10 5 L 0 10 z");
+
+	var nodes = []; //  {name:xxx, ...custom fields...}
+	var links = []; // {source: nodesIdx, target: nodesIdx}
+
+	function findNode(name) {
+		for (var i = 0; i < nodes.length; i++) {
+			if (nodes[i].name === name) return i;
+		}
+		return -1;
+	};
+	// build node list
+	visitBeans(beansData, function(beanInfo, ctxIdx) {
+		nodes.push({
+			name: beanInfo.bean,
+			ctxIdx: ctxIdx
+		});
+		//console.log('pushed bean, ctxIdx='+ctxIdx+', '+beanInfo.bean);
+	});
+
+	// build links list
+	visitBeans(beansData, function(beanInfo) {
+		var srcIdx = findNode(beanInfo.bean);
+		for (var i = 0; i < beanInfo.dependencies.length; i++) {
+			var targetIdx = findNode(beanInfo.dependencies[i]);
+			if (srcIdx >= 0 && targetIdx >= 0) {
+				links.push({
+					source: srcIdx,
+					target: targetIdx
+				});
+			}
+		}
+	});
+
+	force.nodes(nodes).links(links).linkStrength(function(link){if(link.source.ctxIdx != link.target.ctxIdx) return 0.1; else return 1.0;})
+	.linkDistance(function(link){if(link.source.ctxIdx != link.target.ctxIdx) return 25; else return 5;}).start();
+
+	var link = svg.selectAll(".link").data(links).enter().append("line").attr("class", "link").style("stroke-width", function(d) {
+		return Math.sqrt(d.value);
+	});//.attr('marker-end', 'url(#arrow)');
+
+	var node = svg.selectAll(".node").data(nodes).enter().append("circle").attr("class", "node").attr("r", 5).style("fill", function(d) { return color(d.ctxIdx);}).call(force.drag);
+
+	node.append("title").text(function(d) {
+		return d.name;
+	});
+
+	force.on("tick", function() {
+		link.attr("x1", function(d) {
+			return d.source.x;
+		}).attr("y1", function(d) {
+			return d.source.y;
+		}).attr("x2", function(d) {
+			return d.target.x;
+		}).attr("y2", function(d) {
+			return d.target.y;
+		});
+
+		node.attr("cx", function(d) {
+			return d.x;
+		}).attr("cy", function(d) {
+			return d.y;
+		});
+	});
+}
+</script>
+</body>
+</html>
